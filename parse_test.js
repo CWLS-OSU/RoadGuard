@@ -1,4 +1,5 @@
-const fetch = require("node-fetch")
+const mqtt = require("mqtt")
+const fetch = require('node-fetch')
 
 async function get_info() {
     const API_ENDPOINT = "https://datahub.transportation.gov/resource/nm7w-nvbm.json?$query=SELECT%0A%20%20%60datatype%60%2C%0A%20%20%60metadata_generatedat%60%2C%0A%20%20%60metadata_generatedby%60%2C%0A%20%20%60metadata_logfilename%60%2C%0A%20%20%60metadata_schemaversion%60%2C%0A%20%20%60metadata_rsuid%60%2C%0A%20%20%60metadata_kind%60%2C%0A%20%20%60metadata_psid%60%2C%0A%20%20%60metadata_bsmsource%60%2C%0A%20%20%60metadata_externalid%60%2C%0A%20%20%60coredata_msgcnt%60%2C%0A%20%20%60coredata_id%60%2C%0A%20%20%60coredata_secmark%60%2C%0A%20%20%60coredata_position_lat%60%2C%0A%20%20%60coredata_position_long%60%2C%0A%20%20%60coredata_elevation%60%2C%0A%20%20%60coredata_accelset_accelyaw%60%2C%0A%20%20%60coredata_accelset_lat%60%2C%0A%20%20%60coredata_accelset_long%60%2C%0A%20%20%60coredata_accelset_vert%60%2C%0A%20%20%60coredata_angle%60%2C%0A%20%20%60coredata_accuracy_orientation%60%2C%0A%20%20%60coredata_accuracy_semimajor%60%2C%0A%20%20%60coredata_accuracy_semiminor%60%2C%0A%20%20%60coredata_transmission%60%2C%0A%20%20%60coredata_speed%60%2C%0A%20%20%60coredata_heading%60%2C%0A%20%20%60coredata_brakes_wheelbrakes%60%2C%0A%20%20%60coredata_brakes_wheelbrakes_2%60%2C%0A%20%20%60coredata_brakes_wheelbrakes_4%60%2C%0A%20%20%60coredata_brakes_wheelbrakes_1%60%2C%0A%20%20%60coredata_brakes_wheelbrakes_3%60%2C%0A%20%20%60coredata_brakes_traction%60%2C%0A%20%20%60coredata_brakes_abs%60%2C%0A%20%20%60coredata_brakes_scs%60%2C%0A%20%20%60coredata_brakes_brakeboost%60%2C%0A%20%20%60coredata_brakes_auxbrakes%60%2C%0A%20%20%60coredata_size%60%2C%0A%20%20%60part2_suve_classification%60%2C%0A%20%20%60part2_suve_cd_hpmstype%60%2C%0A%20%20%60part2_suve_cd_role%60%2C%0A%20%20%60part2_suve_vd_height%60%2C%0A%20%20%60part2_suve_vd_mass%60%2C%0A%20%20%60part2_suve_vd_bumpers_front%60%2C%0A%20%20%60part2_suve_vd_bumpers_rear%60%2C%0A%20%20%60part2_vse_events%60%2C%0A%20%20%60part2_vse_ph_crumbdata%60%2C%0A%20%20%60part2_vse_pp_confidence%60%2C%0A%20%20%60part2_vse_pp_radiusofcurve%60%2C%0A%20%20%60part2_vse_lights%60%2C%0A%20%20%60coredata_position%60%2C%0A%20%20%60randomnum%60%2C%0A%20%20%60metadata_generatedat_timeofday%60%2C%0A%20%20%60%3A%40computed_region_28hd_vqqn%60";
@@ -78,6 +79,8 @@ async function get_info() {
                 let new_arr = [speed, lat, long, zipcode, speedLimit];
                 new_arr.push(unconverted_arr);
                 result.push(new_arr);
+
+                await difference_in_speed(new_arr);
             }
         }
     }
@@ -85,25 +88,42 @@ async function get_info() {
     return result;
 }
 
-async function difference_in_speed() {
-    const result = await get_info();
-    const final_result = [];
+async function difference_in_speed(current_vehicle) {
+    if (current_vehicle[current_vehicle.length - 2] != 0) {
+        const difference = current_vehicle[0] - current_vehicle[current_vehicle.length - 2];
 
-    for (i = 0; i < result.length; i++) {
-        const current_vehicle = result[i];
+        if (difference > 0) {
+            // await fetch('http://vzmode.rkln.wl.dltdemo.io:30413/registration', {
+            //     method: 'POST',
+            //     headers: {'Content-Type': 'application/json'},
+            //     body: JSON.stringify({"vehicle_info": current_vehicle[current_vehicle.length - 1]})
+            // })
 
-        if (current_vehicle[current_vehicle.length - 2] != 0) {
-            const difference = current_vehicle[0] - current_vehicle[current_vehicle.length - 2];
+            // const published = await publish_to_mqtt();
 
-            if (difference > 0) {
-                final_result.push(current_vehicle[current_vehicle.length - 1]);
+            result_map = {"BasicSafetyMessage": 
+                {
+                    "speed": `${current_vehicle[current_vehicle.length - 1][0]}`, 
+                    "lat": `${current_vehicle[current_vehicle.length - 1][1]}`,
+                    "lon": `${current_vehicle[current_vehicle.length - 1][2]}`
+                }
+            }
+
+            console.log(result_map);
             }
         }
     }
 
-    return final_result;
+async function publish_to_mqtt(speeding_vehicle_inf0) {
+    const topic_name = "SpeedingVehicleInfo";
+    const publish_url = "tcp://vzmode.rkln.wl.dltdemo.io:31234";
+
+    const mqttClient = mqtt.connect(publish_url);
+    await mqttClient.publish(topic_name, JSON.stringify(speeding_vehicle_inf0));
+
+    return true
 }
 
-difference_in_speed().then((result) => {
-    console.log(result);
+get_info().then(() => {
+    console.log("Successfully analyzed all vehicles");
 })
